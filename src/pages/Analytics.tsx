@@ -37,13 +37,13 @@ const Analytics = () => {
 
   if (!user) return null;
 
-  // Calculate stats
+  // Calculate stats - 3 operations = 1 part
   const completedOps = operations.filter(op => op.status === 'completed');
-  const failedOps = operations.filter(op => op.status === 'failed');
-  const runningOps = operations.filter(op => op.status === 'running');
+  const partsCompleted = Math.floor(completedOps.length / 3);
+  const operationsInProgress = completedOps.length % 3;
   
   const totalMachineTime = completedOps.reduce((acc, op) => acc + (op.duration_ms || 0), 0);
-  const avgOperationTime = completedOps.length > 0 ? totalMachineTime / completedOps.length : 0;
+  const avgPartTime = partsCompleted > 0 ? totalMachineTime / partsCompleted : 0;
   const successRate = operations.length > 0 ? (completedOps.length / operations.length) * 100 : 0;
 
   // Parts per operation type
@@ -132,8 +132,11 @@ const Analytics = () => {
                 <CheckCircle2 className="w-6 h-6 text-success" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-success">{completedOps.length}</p>
+                <p className="text-2xl font-bold text-success">{partsCompleted}</p>
                 <p className="text-xs text-muted-foreground">Parts Completed</p>
+                {operationsInProgress > 0 && (
+                  <p className="text-xs text-warning">+{operationsInProgress}/3 in progress</p>
+                )}
               </div>
             </div>
           </CardContent>
