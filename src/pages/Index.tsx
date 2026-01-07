@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { Cog, Gauge, Zap, Timer, Drill, LogOut, Loader2, Wifi, WifiOff } from "lucide-react";
+import { useNavigate, Link } from "react-router-dom";
+import { Cog, Gauge, Zap, Timer, Drill, LogOut, Loader2, Wifi, WifiOff, BarChart3 } from "lucide-react";
 import { SystemCard } from "@/components/SystemCard";
 import { OperationProgress } from "@/components/OperationProgress";
 import { NotificationLog } from "@/components/NotificationLog";
 import { ControlPanel } from "@/components/ControlPanel";
 import { ServoGauge } from "@/components/ServoGauge";
-import { OperationHistory } from "@/components/OperationHistory";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useOperationHistory } from "@/hooks/useOperationHistory";
@@ -18,7 +17,7 @@ const DEVICE_ID = "esp32-drill-001";
 const Index = () => {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
-  const { operations: historyOperations, loading: historyLoading, startOperation, completeOperation } = useOperationHistory(DEVICE_ID);
+  const { startOperation, completeOperation } = useOperationHistory(DEVICE_ID);
   
   const [isRunning, setIsRunning] = useState(false);
   const [currentOperation, setCurrentOperation] = useState(0);
@@ -258,6 +257,12 @@ const Index = () => {
                 {isDeviceOnline ? 'ESP32 Online' : 'Simulation Mode'}
               </Badge>
             </div>
+            <Link to="/analytics">
+              <Button variant="outline" size="sm" className="gap-2">
+                <BarChart3 className="w-4 h-4" />
+                <span className="hidden md:inline">Analytics</span>
+              </Button>
+            </Link>
             <span className="text-sm text-muted-foreground hidden md:block">
               {user.email}
             </span>
@@ -316,7 +321,20 @@ const Index = () => {
             <OperationProgress operations={operations} />
           </div>
           
-          <OperationHistory operations={historyOperations} loading={historyLoading} />
+          <Link to="/analytics" className="block">
+            <div className="card-industrial p-6 hover:border-primary/50 transition-colors cursor-pointer">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <BarChart3 className="w-5 h-5 text-primary" />
+                  <div>
+                    <h3 className="font-semibold">View Analytics</h3>
+                    <p className="text-sm text-muted-foreground">Parts completed, machine uptime & more</p>
+                  </div>
+                </div>
+                <div className="text-primary">→</div>
+              </div>
+            </div>
+          </Link>
         </div>
 
         {/* Right Column - Controls & Notifications */}
