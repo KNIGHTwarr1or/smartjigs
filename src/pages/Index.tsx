@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Cog, Gauge, Zap, Timer, Drill, LogOut, Loader2 } from "lucide-react";
+import { Cog, Gauge, Zap, Timer, Drill, LogOut, Loader2, Wifi, WifiOff } from "lucide-react";
 import { SystemCard } from "@/components/SystemCard";
 import { OperationProgress } from "@/components/OperationProgress";
 import { NotificationLog } from "@/components/NotificationLog";
@@ -10,22 +10,22 @@ import { OperationHistory } from "@/components/OperationHistory";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useOperationHistory } from "@/hooks/useOperationHistory";
+import { useESP32WebSocket, ESP32Message, ESP32State } from "@/hooks/useESP32WebSocket";
+import { Badge } from "@/components/ui/badge";
 
-const DEVICE_ID = "esp32-drill-001"; // Default device ID
+const DEVICE_ID = "esp32-drill-001";
 
 const Index = () => {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const { operations: historyOperations, loading: historyLoading, startOperation, completeOperation } = useOperationHistory(DEVICE_ID);
   
-  const [isConnected, setIsConnected] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [currentOperation, setCurrentOperation] = useState(0);
   const [servoAngle, setServoAngle] = useState(0);
   const [motorStatus, setMotorStatus] = useState<"active" | "idle">("idle");
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [currentOperationId, setCurrentOperationId] = useState<string | null>(null);
-  const [operationStartTime, setOperationStartTime] = useState<number | null>(null);
+  const [useSimulation, setUseSimulation] = useState(false);
 
   type OperationStatus = "pending" | "active" | "completed";
   
@@ -43,8 +43,51 @@ const Index = () => {
   ]);
 
   const [notifications, setNotifications] = useState([
-    { id: 1, message: "System is ready to drill the holes.", timestamp: "10:00:05", sent: true },
+    { id: 1, message: "System initialized. Waiting for device connection.", timestamp: new Date().toLocaleTimeString(), sent: true },
   ]);
+
+  const handleStateUpdate = useCallback((state: Partial<ESP32State>) => {
+    if (state.motorStatus !== undefined) setMotorStatus(state.motorStatus);
+    if (state.servoAngle !== undefined) setServoAngle(state.servoAngle);
+    if (state.currentOperation !== undefined) setCurrentOperation(state.currentOperation);
+    if (state.isRunning !== undefined) setIsRunning(state.isRunning);
+  }, []);
+
+  const handleDeviceStatusChange = useCallback((isOnline: boolean) => {
+    addNotification(isOnline ? "ESP32 device connected." : "ESP32 device disconnected.");
+    if (!isOnline) {
+      setUseSimulation(true);
+    }
+  }, []);
+
+  const handleMessage = useCallback((message: ESP32Message) => {
+    if (message.type === 'notification' && message.message) {
+      addNotification(message.message);
+    } else if (message.type === 'operation_complete') {
+      const opId = message.state?.currentOperation;
+      if (opId) {
+        updateOperationStatus(opId, "completed");
+      }
+    } else if (message.type === 'operation_start') {
+      const opId = message.state?.currentOperation;
+      if (opId) {
+        updateOperationStatus(opId, "active");
+      }
+    }
+  }, []);
+
+  const {
+    isConnected,
+    isDeviceOnline,
+    startDrilling,
+    stopDrilling,
+    resetSystem,
+  } = useESP32WebSocket({
+    deviceId: DEVICE_ID,
+    onStateUpdate: handleStateUpdate,
+    onDeviceStatusChange: handleDeviceStatusChange,
+    onMessage: handleMessage,
+  });
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -56,29 +99,22 @@ const Index = () => {
   // Timer effect
   useEffect(() => {
     if (!isRunning) return;
-
     const interval = setInterval(() => {
       setElapsedTime((prev) => prev + 1);
     }, 1000);
-
     return () => clearInterval(interval);
   }, [isRunning]);
 
-  // Operation sequence effect
+  // Simulation mode for when ESP32 is not connected
   useEffect(() => {
-    if (!isRunning || !user) return;
+    if (!isRunning || !useSimulation || !user) return;
 
-    const runSequence = async () => {
-      // Operation 1
+    const runSimulation = async () => {
       setMotorStatus("active");
       setCurrentOperation(1);
       updateOperationStatus(1, "active");
       
       const op1 = await startOperation("Operation 1 - Initial Drilling", 0);
-      if (op1) {
-        setCurrentOperationId(op1.id);
-        setOperationStartTime(Date.now());
-      }
 
       setTimeout(async () => {
         setMotorStatus("idle");
@@ -86,7 +122,6 @@ const Index = () => {
         addNotification("Operation 1 completed. Ready for operation 2.");
         if (op1) await completeOperation(op1.id, 5000);
 
-        // Operation 2
         setTimeout(async () => {
           setServoAngle(120);
           setCurrentOperation(2);
@@ -101,7 +136,6 @@ const Index = () => {
             addNotification("Operation 2 completed. Ready for operation 3.");
             if (op2) await completeOperation(op2.id, 5000);
 
-            // Operation 3
             setTimeout(async () => {
               setServoAngle(240);
               setCurrentOperation(3);
@@ -123,8 +157,8 @@ const Index = () => {
       }, 5000);
     };
 
-    runSequence();
-  }, [isRunning, user]);
+    runSimulation();
+  }, [isRunning, useSimulation, user]);
 
   const updateOperationStatus = (id: number, status: OperationStatus) => {
     setOperations((prev) =>
@@ -142,24 +176,37 @@ const Index = () => {
   };
 
   const handleStart = () => {
+    if (isDeviceOnline) {
+      startDrilling();
+    } else {
+      setUseSimulation(true);
+    }
     setIsRunning(true);
     setElapsedTime(0);
     setServoAngle(0);
     setOperations((prev) => prev.map((op) => ({ ...op, status: "pending" as const })));
-    setNotifications([{ id: 1, message: "System is ready to drill the holes.", timestamp: new Date().toLocaleTimeString(), sent: true }]);
+    setNotifications([{ id: 1, message: "Starting drilling sequence...", timestamp: new Date().toLocaleTimeString(), sent: true }]);
   };
 
   const handleStop = () => {
+    if (isDeviceOnline) {
+      stopDrilling();
+    }
     setIsRunning(false);
     setMotorStatus("idle");
+    addNotification("Drilling stopped by user.");
   };
 
   const handleReset = () => {
+    if (isDeviceOnline) {
+      resetSystem();
+    }
     setServoAngle(0);
     setCurrentOperation(0);
     setElapsedTime(0);
     setOperations((prev) => prev.map((op) => ({ ...op, status: "pending" as const })));
     setNotifications([]);
+    addNotification("System reset.");
   };
 
   const formatTime = (seconds: number) => {
@@ -197,6 +244,20 @@ const Index = () => {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {/* Connection Status */}
+            <div className="flex items-center gap-2">
+              <Badge 
+                variant={isDeviceOnline ? "default" : "secondary"}
+                className={`gap-1.5 ${isDeviceOnline ? 'bg-success text-success-foreground' : ''}`}
+              >
+                {isDeviceOnline ? (
+                  <Wifi className="w-3 h-3" />
+                ) : (
+                  <WifiOff className="w-3 h-3" />
+                )}
+                {isDeviceOnline ? 'ESP32 Online' : 'Simulation Mode'}
+              </Badge>
+            </div>
             <span className="text-sm text-muted-foreground hidden md:block">
               {user.email}
             </span>
@@ -274,7 +335,7 @@ const Index = () => {
 
       {/* Footer */}
       <footer className="mt-12 text-center text-xs text-muted-foreground">
-        <p>ESP32 Drilling System Controller • WiFi-Enabled IoT Dashboard</p>
+        <p>ESP32 Drilling System Controller • WiFi-Enabled IoT Dashboard • {isDeviceOnline ? 'Connected' : 'Simulation Mode'}</p>
       </footer>
     </div>
   );
