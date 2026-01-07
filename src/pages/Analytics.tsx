@@ -15,7 +15,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, PieChart, Pie, Cell, AreaChart, Area } from "recharts";
 import { startOfDay, startOfWeek, subDays, subWeeks, isAfter, format } from "date-fns";
 
-const DEVICE_ID = "esp32-drill-001";
+const DEVICE_ID = "esp32-drill-001"; // ESP32 device identifier
 
 const Analytics = () => {
   const { user, loading: authLoading } = useAuth();
