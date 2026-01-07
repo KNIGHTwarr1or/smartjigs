@@ -1,1 +1,4 @@
 project_id = "ixpawqgimqdsrqaezzzp"
+
+[functions.esp32-websocket]
+verify_jwt = false
