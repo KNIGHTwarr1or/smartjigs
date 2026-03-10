@@ -23,8 +23,8 @@
 
 // ============== CONFIGURATION ==============
 // WiFi credentials
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid = "Sharvesh's iPhone";
+const char* password = "Sharvesh47";
 
 // WebSocket server details
 const char* wsHost = "ixpawqgimqdsrqaezzzp.functions.supabase.co";
